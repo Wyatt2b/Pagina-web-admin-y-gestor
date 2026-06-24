@@ -1,0 +1,18 @@
+@using AdminArboles.Components.Layout
+
+<Router AppAssembly="@typeof(App).Assembly">
+    <Found Context="routeData">
+        <RouteView RouteData="@routeData" DefaultLayout="@typeof(MainLayout)" />
+        <FocusOnNavigate RouteData="@routeData" Selector="h1" />
+    </Found>
+    <NotFound>
+        <PageTitle>No encontrado</PageTitle>
+        <LayoutView Layout="@typeof(MainLayout)">
+            <div class="text-center py-5">
+                <h2>😕 Página no encontrada</h2>
+                <p>Lo sentimos, la página que buscas no existe.</p>
+                <a href="/" class="btn btn-success">Volver al inicio</a>
+            </div>
+        </LayoutView>
+    </NotFound>
+</Router>

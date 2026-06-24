@@ -1,0 +1,216 @@
+@page "/dashboard"
+@using AdminArboles.Services
+@inject ICampañaService CampañaService
+@inject IArbolService ArbolService
+@inject IInspectorService InspectorService
+@inject IAuthService AuthService
+@inject IDownloadService DownloadService
+@inject NavigationManager Navigation
+
+@if (Campañas != null)
+{
+    <div class="row mb-4">
+        <div class="col-12">
+            <h2 class="mb-3">🌳 Panel de Control</h2>
+            <p class="text-muted">Bienvenido, @UsuarioActual?.Nombre. Aquí puedes monitorear todas tus campañas.</p>
+        </div>
+    </div>
+
+    <!-- Tarjetas de estadísticas -->
+    <div class="row">
+        <div class="col-md-3 col-sm-6">
+            <div class="dashboard-card" @onclick="() => {}">
+                <div class="icon">📋</div>
+                <div class="number">@Campañas.Count</div>
+                <div class="label">Campañas Activas</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="dashboard-card" @onclick="() => {}">
+                <div class="icon">🌱</div>
+                <div class="number">@TotalArboles</div>
+                <div class="label">Árboles Plantados</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="dashboard-card" @onclick="() => {}">
+                <div class="icon">✅</div>
+                <div class="number">@ArbolesVivos</div>
+                <div class="label">Árboles Sobrevivientes</div>
+            </div>
+        </div>
+        <div class="col-md-3 col-sm-6">
+            <div class="dashboard-card" @onclick="() => Navigation.NavigateTo('/inspectores')">
+                <div class="icon">🔍</div>
+                <div class="number">@Inspectores.Count</div>
+                <div class="label">Inspectores Activos</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Tabla de campañas -->
+    <div class="row mt-4">
+        <div class="col-12">
+            <div class="table-container">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">📊 Campañas Recientes</h5>
+                    <div>
+                        <button class="btn btn-success btn-sm me-2" @onclick="() => Navigation.NavigateTo('/campañas/crear')">
+                            + Nueva Campaña
+                        </button>
+                        <button class="btn btn-outline-success btn-sm" @onclick="ExportAllCampañas">
+                            📥 Exportar CSV
+                        </button>
+                    </div>
+                </div>
+                
+                <table class="table table-hover">
+                    <thead>
+                        <tr>
+                            <th>Código</th>
+                            <th>Nombre</th>
+                            <th>Ubicación</th>
+                            <th>Árboles</th>
+                            <th>Supervivencia</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach (var campaña in Campañas.OrderByDescending(c => c.FechaInicio).Take(10))
+                        {
+                            <tr>
+                                <td>
+                                    <span class="code-badge">@campaña.CodigoAlfanumerico</span>
+                                </td>
+                                <td>
+                                    <strong>@campaña.Nombre</strong>
+                                    <br />
+                                    <small class="text-muted">@campaña.FechaInicio.ToString("dd/MM/yyyy")</small>
+                                </td>
+                                <td>@campaña.Ubicacion</td>
+                                <td>@campaña.ArbolesPlantados</td>
+                                <td>
+                                    @{
+                                        var porcentaje = campaña.ArbolesPlantados > 0 
+                                            ? Math.Round((double)campaña.ArbolesSobrevivientes / campaña.ArbolesPlantados * 100) 
+                                            : 0;
+                                    }
+                                    <div class="progress" style="height: 20px; width: 100px;">
+                                        <div class="progress-bar bg-success" 
+                                             style="width: @porcentaje%;" 
+                                             role="progressbar" 
+                                             aria-valuenow="@porcentaje" 
+                                             aria-valuemin="0" 
+                                             aria-valuemax="100">
+                                            @porcentaje%
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    @if (campaña.IsActive)
+                                    {
+                                        <span class="badge bg-success">Activa</span>
+                                    }
+                                    else
+                                    {
+                                        <span class="badge bg-secondary">Finalizada</span>
+                                    }
+                                </td>
+                                <td>
+                                    <button class="btn btn-sm btn-outline-info" @onclick="() => VerCampaña(campaña.Id)">
+                                        👁️
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-success" @onclick="() => ExportCampaña(campaña.Id)">
+                                        📥
+                                    </button>
+                                    <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarCampaña(campaña.Id)">
+                                        🗑️
+                                    </button>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <div class="spinner-border text-success" role="status">
+            <span class="visually-hidden">Cargando...</span>
+        </div>
+    </div>
+}
+
+@code {
+    private List<Campaña> Campañas { get; set; } = new();
+    private List<Inspector> Inspectores { get; set; } = new();
+    private Usuario? UsuarioActual { get; set; }
+    private int TotalArboles { get; set; }
+    private int ArbolesVivos { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        UsuarioActual = await AuthService.GetCurrentUserAsync();
+        if (UsuarioActual != null)
+        {
+            Campañas = await CampañaService.GetCampañasAsync(UsuarioActual.TenantId);
+            Inspectores = await InspectorService.GetInspectoresByTenantAsync(UsuarioActual.TenantId);
+            
+            foreach (var camp in Campañas)
+            {
+                var arboles = await ArbolService.GetArbolesByCampañaAsync(camp.Id);
+                TotalArboles += arboles.Count;
+                ArbolesVivos += arboles.Count(a => a.Estado == "Vivo");
+            }
+        }
+    }
+
+    private async Task ExportCampaña(string campañaId)
+    {
+        var csvData = await CampañaService.ExportCampañaToCSVAsync(campañaId);
+        if (csvData.Length > 0)
+        {
+            var fileName = $"campaña_{campañaId}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            await DownloadService.DownloadFileAsync(csvData, fileName, "text/csv; charset=utf-8");
+        }
+    }
+
+    private async Task ExportAllCampañas()
+    {
+        if (UsuarioActual != null)
+        {
+            var csvData = await CampañaService.ExportAllCampañasToCSVAsync(UsuarioActual.TenantId);
+            if (csvData.Length > 0)
+            {
+                var fileName = $"campañas_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                await DownloadService.DownloadFileAsync(csvData, fileName, "text/csv; charset=utf-8");
+            }
+        }
+    }
+
+    private async Task EliminarCampaña(string campañaId)
+    {
+        // Usar confirmación con JavaScript o crear un modal en Blazor
+        var confirmed = true; // Por ahora, siempre confirma
+        if (confirmed)
+        {
+            await CampañaService.DeleteCampañaAsync(campañaId);
+            await LoadData();
+            StateHasChanged();
+        }
+    }
+
+    private void VerCampaña(string campañaId)
+    {
+        Navigation.NavigateTo($"/campañas/detalle/{campañaId}");
+    }
+}

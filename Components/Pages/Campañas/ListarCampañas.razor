@@ -1,0 +1,293 @@
+@page "/campañas/lista"
+@using AdminArboles.Services
+@inject ICampañaService CampañaService
+@inject IAuthService AuthService
+@inject IDownloadService DownloadService
+@inject NavigationManager Navigation
+
+<div class="row mb-4">
+    <div class="col-12 d-flex justify-content-between align-items-center">
+        <h3>📋 Lista de Campañas</h3>
+        <button class="btn btn-success" @onclick="() => Navigation.NavigateTo('/campañas/crear')">
+            + Nueva Campaña
+        </button>
+    </div>
+</div>
+
+@if (Campañas.Any())
+{
+    <div class="table-container">
+        <div class="mb-3 d-flex justify-content-between">
+            <div style="flex: 1; max-width: 300px;">
+                <input type="text" 
+                       class="form-control" 
+                       placeholder="🔍 Buscar campaña..." 
+                       @bind="SearchTerm" 
+                       @bind:event="oninput" />
+            </div>
+            <div>
+                <button class="btn btn-outline-success btn-sm me-2" @onclick="ExportAllCampañas">
+                    📥 Exportar Todos
+                </button>
+                <select class="form-select form-select-sm" style="width: auto; display: inline-block;" @bind="FilterStatus" @onchange="ApplyFilters">
+                    <option value="all">Todos</option>
+                    <option value="active">Activos</option>
+                    <option value="inactive">Finalizados</option>
+                </select>
+            </div>
+        </div>
+
+        <table class="table table-hover">
+            <thead>
+                <tr>
+                    <th @onclick="() => SortBy('CodigoAlfanumerico')" style="cursor: pointer;">
+                        Código @GetSortIcon("CodigoAlfanumerico")
+                    </th>
+                    <th @onclick="() => SortBy('Nombre')" style="cursor: pointer;">
+                        Nombre @GetSortIcon("Nombre")
+                    </th>
+                    <th @onclick="() => SortBy('Ubicacion')" style="cursor: pointer;">
+                        Ubicación @GetSortIcon("Ubicacion")
+                    </th>
+                    <th @onclick="() => SortBy('FechaInicio')" style="cursor: pointer;">
+                        Fecha Inicio @GetSortIcon("FechaInicio")
+                    </th>
+                    <th @onclick="() => SortBy('ArbolesPlantados')" style="cursor: pointer;">
+                        Árboles @GetSortIcon("ArbolesPlantados")
+                    </th>
+                    <th>Supervivencia</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var campaña in FilteredCampañas)
+                {
+                    <tr>
+                        <td><span class="code-badge">@campaña.CodigoAlfanumerico</span></td>
+                        <td><strong>@campaña.Nombre</strong></td>
+                        <td>@campaña.Ubicacion</td>
+                        <td>@campaña.FechaInicio.ToString("dd/MM/yyyy")</td>
+                        <td>@campaña.ArbolesPlantados</td>
+                        <td>
+                            @{
+                                var porcentaje = campaña.ArbolesPlantados > 0 
+                                    ? Math.Round((double)campaña.ArbolesSobrevivientes / campaña.ArbolesPlantados * 100) 
+                                    : 0;
+                            }
+                            <div class="progress" style="height: 20px; width: 80px;">
+                                <div class="progress-bar bg-success" 
+                                     style="width: @porcentaje%;" 
+                                     role="progressbar" 
+                                     aria-valuenow="@porcentaje" 
+                                     aria-valuemin="0" 
+                                     aria-valuemax="100">
+                                    @porcentaje%
+                                </div>
+                            </div>
+                        </td>
+                        <td>
+                            @if (campaña.IsActive)
+                            {
+                                <span class="badge bg-success">Activa</span>
+                            }
+                            else
+                            {
+                                <span class="badge bg-secondary">Finalizada</span>
+                            }
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" @onclick="() => VerCampaña(campaña.Id)">
+                                👁️
+                            </button>
+                            <button class="btn btn-sm btn-outline-primary" @onclick="() => EditarCampaña(campaña.Id)">
+                                ✏️
+                            </button>
+                            <button class="btn btn-sm btn-outline-success" @onclick="() => ExportCampaña(campaña.Id)">
+                                📥
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarCampaña(campaña.Id)">
+                                🗑️
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+
+        <div class="d-flex justify-content-between align-items-center mt-3">
+            <span class="text-muted">
+                Mostrando @FilteredCampañas.Count de @Campañas.Count campañas
+            </span>
+            <div>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="PreviousPage" disabled="@(CurrentPage == 1)">
+                    Anterior
+                </button>
+                <span class="mx-2">Página @CurrentPage de @TotalPages</span>
+                <button class="btn btn-sm btn-outline-secondary" @onclick="NextPage" disabled="@(CurrentPage == TotalPages)">
+                    Siguiente
+                </button>
+            </div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="text-center py-5">
+        <h4>📭 No hay campañas registradas</h4>
+        <p class="text-muted">Comienza creando tu primera campaña de reforestación.</p>
+        <button class="btn btn-success" @onclick="() => Navigation.NavigateTo('/campañas/crear')">
+            + Crear Campaña
+        </button>
+    </div>
+}
+
+@code {
+    private List<Campaña> Campañas { get; set; } = new();
+    private List<Campaña> FilteredCampañas { get; set; } = new();
+    private string SearchTerm { get; set; } = string.Empty;
+    private string FilterStatus { get; set; } = "all";
+    private int CurrentPage { get; set; } = 1;
+    private int ItemsPerPage { get; set; } = 10;
+    private int TotalPages => Math.Max(1, (int)Math.Ceiling((double)FilteredCampañas.Count / ItemsPerPage));
+    private string SortByField { get; set; } = string.Empty;
+    private bool SortAscending { get; set; } = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadData();
+    }
+
+    private async Task LoadData()
+    {
+        var usuario = await AuthService.GetCurrentUserAsync();
+        if (usuario != null)
+        {
+            Campañas = await CampañaService.GetCampañasAsync(usuario.TenantId);
+            ApplyFilters();
+        }
+    }
+
+    private void ApplyFilters()
+    {
+        var query = Campañas.AsEnumerable();
+
+        // Búsqueda
+        if (!string.IsNullOrEmpty(SearchTerm))
+        {
+            query = query.Where(c => 
+                c.Nombre.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.CodigoAlfanumerico.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase) ||
+                c.Ubicacion.Contains(SearchTerm, StringComparison.OrdinalIgnoreCase));
+        }
+
+        // Filtro de estado
+        if (FilterStatus == "active")
+        {
+            query = query.Where(c => c.IsActive);
+        }
+        else if (FilterStatus == "inactive")
+        {
+            query = query.Where(c => !c.IsActive);
+        }
+
+        // Ordenamiento
+        if (!string.IsNullOrEmpty(SortByField))
+        {
+            query = SortByField switch
+            {
+                "CodigoAlfanumerico" => SortAscending ? query.OrderBy(c => c.CodigoAlfanumerico) : query.OrderByDescending(c => c.CodigoAlfanumerico),
+                "Nombre" => SortAscending ? query.OrderBy(c => c.Nombre) : query.OrderByDescending(c => c.Nombre),
+                "Ubicacion" => SortAscending ? query.OrderBy(c => c.Ubicacion) : query.OrderByDescending(c => c.Ubicacion),
+                "FechaInicio" => SortAscending ? query.OrderBy(c => c.FechaInicio) : query.OrderByDescending(c => c.FechaInicio),
+                "ArbolesPlantados" => SortAscending ? query.OrderBy(c => c.ArbolesPlantados) : query.OrderByDescending(c => c.ArbolesPlantados),
+                _ => query
+            };
+        }
+
+        FilteredCampañas = query.ToList();
+        CurrentPage = 1; // Resetear a primera página al filtrar
+    }
+
+    private void SortBy(string field)
+    {
+        if (SortByField == field)
+        {
+            SortAscending = !SortAscending;
+        }
+        else
+        {
+            SortByField = field;
+            SortAscending = true;
+        }
+        ApplyFilters();
+        StateHasChanged();
+    }
+
+    private string GetSortIcon(string field)
+    {
+        if (SortByField != field) return "↕";
+        return SortAscending ? "↑" : "↓";
+    }
+
+    private void PreviousPage()
+    {
+        if (CurrentPage > 1)
+        {
+            CurrentPage--;
+        }
+    }
+
+    private void NextPage()
+    {
+        if (CurrentPage < TotalPages)
+        {
+            CurrentPage++;
+        }
+    }
+
+    private async Task ExportCampaña(string campañaId)
+    {
+        var csvData = await CampañaService.ExportCampañaToCSVAsync(campañaId);
+        if (csvData.Length > 0)
+        {
+            var fileName = $"campaña_{campañaId}_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+            await DownloadService.DownloadFileAsync(csvData, fileName, "text/csv; charset=utf-8");
+        }
+    }
+
+    private async Task ExportAllCampañas()
+    {
+        var usuario = await AuthService.GetCurrentUserAsync();
+        if (usuario != null)
+        {
+            var csvData = await CampañaService.ExportAllCampañasToCSVAsync(usuario.TenantId);
+            if (csvData.Length > 0)
+            {
+                var fileName = $"campañas_{DateTime.Now:yyyyMMdd_HHmmss}.csv";
+                await DownloadService.DownloadFileAsync(csvData, fileName, "text/csv; charset=utf-8");
+            }
+        }
+    }
+
+    private void VerCampaña(string campañaId)
+    {
+        Navigation.NavigateTo($"/campañas/detalle/{campañaId}");
+    }
+
+    private void EditarCampaña(string campañaId)
+    {
+        Navigation.NavigateTo($"/campañas/editar/{campañaId}");
+    }
+
+    private async Task EliminarCampaña(string campañaId)
+    {
+        var confirmed = true; // Aquí puedes agregar un modal de confirmación
+        if (confirmed)
+        {
+            await CampañaService.DeleteCampañaAsync(campañaId);
+            await LoadData();
+            StateHasChanged();
+        }
+    }
+}

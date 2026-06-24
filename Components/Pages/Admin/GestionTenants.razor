@@ -1,0 +1,109 @@
+// Components/Pages/Admin/GestionTenants.razor
+@page "/admin/tenants"
+@attribute [Authorize(Roles = "Admin")]
+@inject ITenantService TenantService
+@inject NavigationManager Navigation
+
+<h3>Gestión de Tenants</h3>
+
+<!-- Crear Nuevo Tenant -->
+<div class="card mb-3">
+    <div class="card-header">Aprovisionar Nuevo Tenant</div>
+    <div class="card-body">
+        <EditForm Model="@NewTenant" OnValidSubmit="@HandleCreateTenant">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Nombre del Tenant</label>
+                    <InputText @bind-Value="NewTenant.Nombre" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <label>Dominio</label>
+                    <InputText @bind-Value="NewTenant.Dominio" class="form-control" placeholder="ejemplo.com" />
+                </div>
+                <div class="col-md-4">
+                    <label>Plan</label>
+                    <InputSelect @bind-Value="NewTenant.Plan" class="form-control">
+                        <option value="Básico">Básico</option>
+                        <option value="Premium">Premium</option>
+                        <option value="Empresarial">Empresarial</option>
+                    </InputSelect>
+                </div>
+            </div>
+            <button type="submit" class="btn btn-success mt-2">Crear Tenant</button>
+        </EditForm>
+    </div>
+</div>
+
+<!-- Lista de Tenants -->
+<div class="card">
+    <div class="card-header">Tenants Activos</div>
+    <div class="card-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Dominio</th>
+                    <th>Plan</th>
+                    <th>Fecha Creación</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var tenant in Tenants)
+                {
+                    <tr>
+                        <td>@tenant.Nombre</td>
+                        <td>@tenant.Dominio</td>
+                        <td>@tenant.Plan</td>
+                        <td>@tenant.FechaCreacion.ToShortDateString()</td>
+                        <td>
+                            <span class="badge @(tenant.IsActive ? "bg-success" : "bg-danger")">
+                                @(tenant.IsActive ? "Activo" : "Inactivo")
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => ToggleTenant(tenant.Id)">
+                                @(tenant.IsActive ? "Desactivar" : "Activar")
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private Tenant NewTenant { get; set; } = new Tenant();
+    private List<Tenant> Tenants { get; set; } = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadTenants();
+    }
+
+    private async Task LoadTenants()
+    {
+        Tenants = await TenantService.GetAllTenantsAsync();
+        Tenants = Tenants.Where(t => t.IsActive).ToList();
+    }
+
+    private async Task HandleCreateTenant()
+    {
+        await TenantService.CrearTenantAsync(NewTenant);
+        NewTenant = new Tenant();
+        await LoadTenants();
+    }
+
+    private async Task ToggleTenant(string tenantId)
+    {
+        var tenant = await TenantService.GetTenantByIdAsync(tenantId);
+        if (tenant != null)
+        {
+            tenant.IsActive = !tenant.IsActive;
+            await TenantService.UpdateTenantAsync(tenant);
+            await LoadTenants();
+        }
+    }
+}

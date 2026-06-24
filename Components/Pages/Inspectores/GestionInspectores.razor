@@ -1,0 +1,146 @@
+// Components/Pages/Inspectores/GestionInspectores.razor
+@page "/inspectores"
+@inject IInspectorService InspectorService
+@inject ICampañaService CampañaService
+@inject NavigationManager Navigation
+
+<h3>Gestión de Inspectores</h3>
+
+<!-- Formulario de Registro -->
+<div class="card mb-3">
+    <div class="card-header">Registrar Nuevo Inspector</div>
+    <div class="card-body">
+        <EditForm Model="@NewInspector" OnValidSubmit="@HandleRegisterInspector">
+            <div class="row">
+                <div class="col-md-4">
+                    <label>Nombre</label>
+                    <InputText @bind-Value="NewInspector.Nombre" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <label>Email</label>
+                    <InputText @bind-Value="NewInspector.Email" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <label>Especialidad</label>
+                    <InputText @bind-Value="NewInspector.Especialidad" class="form-control" />
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-4">
+                    <label>Teléfono</label>
+                    <InputText @bind-Value="NewInspector.Telefono" class="form-control" />
+                </div>
+                <div class="col-md-4">
+                    <label>Campaña</label>
+                    <InputSelect @bind-Value="SelectedCampañaId" class="form-control">
+                        <option value="">-- Seleccionar --</option>
+                        @foreach (var camp in Campañas)
+                        {
+                            <option value="@camp.Id">@camp.Nombre</option>
+                        }
+                    </InputSelect>
+                </div>
+                <div class="col-md-4 d-flex align-items-end">
+                    <button type="submit" class="btn btn-primary">Registrar Inspector</button>
+                </div>
+            </div>
+        </EditForm>
+    </div>
+</div>
+
+<!-- Lista de Inspectores -->
+<div class="card">
+    <div class="card-header">Lista de Inspectores</div>
+    <div class="card-body">
+        <table class="table">
+            <thead>
+                <tr>
+                    <th>Nombre</th>
+                    <th>Email</th>
+                    <th>Especialidad</th>
+                    <th>Estado</th>
+                    <th>Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var inspector in Inspectores)
+                {
+                    <tr>
+                        <td>@inspector.Nombre</td>
+                        <td>@inspector.Email</td>
+                        <td>@inspector.Especialidad</td>
+                        <td>
+                            <span class="badge @(inspector.IsActive ? "bg-success" : "bg-danger")">
+                                @(inspector.IsActive ? "Activo" : "Inactivo")
+                            </span>
+                        </td>
+                        <td>
+                            <button class="btn btn-sm btn-outline-info" @onclick="() => ElevarPrivilegios(inspector.Id)">
+                                Elevar Privilegios
+                            </button>
+                            <button class="btn btn-sm btn-outline-danger" @onclick="() => EliminarInspector(inspector.Id)">
+                                Eliminar
+                            </button>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>
+
+@code {
+    private Inspector NewInspector { get; set; } = new Inspector();
+    private string SelectedCampañaId { get; set; } = string.Empty;
+    private List<Inspector> Inspectores { get; set; } = new();
+    private List<Campaña> Campañas { get; set; } = new();
+
+    [Inject] private IAuthService AuthService { get; set; } = default!;
+
+    protected override async Task OnInitializedAsync()
+    {
+        var usuario = await AuthService.GetCurrentUserAsync();
+        if (usuario != null)
+        {
+            Campañas = await CampañaService.GetCampañasAsync(usuario.TenantId);
+            NewInspector.TenantId = usuario.TenantId;
+            await LoadInspectores();
+        }
+    }
+
+    private async Task LoadInspectores()
+    {
+        if (!string.IsNullOrEmpty(SelectedCampañaId))
+        {
+            Inspectores = await InspectorService.GetInspectoresByCampañaAsync(SelectedCampañaId);
+        }
+        else
+        {
+            var usuario = await AuthService.GetCurrentUserAsync();
+            if (usuario != null)
+            {
+                Inspectores = await InspectorService.GetInspectoresByTenantAsync(usuario.TenantId);
+            }
+        }
+    }
+
+    private async Task HandleRegisterInspector()
+    {
+        NewInspector.CampañaId = SelectedCampañaId;
+        await InspectorService.RegistrarInspectorAsync(NewInspector);
+        NewInspector = new Inspector();
+        await LoadInspectores();
+    }
+
+    private async Task ElevarPrivilegios(string inspectorId)
+    {
+        await InspectorService.ElevarPrivilegiosInspectorAsync(inspectorId);
+        await LoadInspectores();
+    }
+
+    private async Task EliminarInspector(string inspectorId)
+    {
+        await InspectorService.DeleteInspectorAsync(inspectorId);
+        await LoadInspectores();
+    }
+}

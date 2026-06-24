@@ -1,0 +1,55 @@
+// Components/Pages/Login.razor
+@page "/login"
+@inject IAuthService AuthService
+@inject NavigationManager Navigation
+
+<h2>Iniciar Sesión</h2>
+
+<div class="card">
+    <div class="card-body">
+        @if (!string.IsNullOrEmpty(ErrorMessage))
+        {
+            <div class="alert alert-danger">@ErrorMessage</div>
+        }
+
+        <div class="mb-3">
+            <label class="form-label">Email</label>
+            <InputText @bind-Value="Email" class="form-control" placeholder="ingresa@email.com" />
+        </div>
+
+        <div class="mb-3">
+            <label class="form-label">OTP (Código de Verificación)</label>
+            <InputText @bind-Value="OTP" class="form-control" placeholder="123456" />
+        </div>
+
+        <button class="btn btn-primary" @onclick="HandleLogin">Ingresar</button>
+    </div>
+</div>
+
+@code {
+    private string Email { get; set; } = string.Empty;
+    private string OTP { get; set; } = string.Empty;
+    private string ErrorMessage { get; set; } = string.Empty;
+
+    private async Task HandleLogin()
+    {
+        ErrorMessage = string.Empty;
+        var success = await AuthService.LoginAsync(Email, OTP);
+        if (success)
+        {
+            var usuario = await AuthService.GetCurrentUserAsync();
+            if (usuario != null && usuario.Rol == "Admin")
+            {
+                Navigation.NavigateTo("/admin/dashboard");
+            }
+            else
+            {
+                Navigation.NavigateTo("/dashboard");
+            }
+        }
+        else
+        {
+            ErrorMessage = "Credenciales inválidas. Verifica tu email y OTP.";
+        }
+    }
+}

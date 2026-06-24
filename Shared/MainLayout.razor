@@ -1,0 +1,78 @@
+@using Microsoft.AspNetCore.Components.Authorization
+@using AdminArboles.Services
+@inherits LayoutComponentBase
+
+<div class="page">
+    <NavMenu />
+    
+    <main class="container-fluid px-4 py-4">
+        <div class="page-content">
+            @if (IsLoading)
+            {
+                <div class="text-center py-5">
+                    <div class="spinner-border text-success" role="status" style="width: 3rem; height: 3rem;">
+                        <span class="visually-hidden">Cargando...</span>
+                    </div>
+                    <p class="mt-3 text-muted">Cargando datos...</p>
+                </div>
+            }
+            else
+            {
+                @Body
+            }
+        </div>
+    </main>
+
+    <footer class="border-top footer text-muted text-center py-3 mt-4">
+        <small>
+            🌳 Admin Árboles - Sistema de Gestión de Campañas de Reforestación v1.0
+            <br />
+            © @DateTime.Now.Year - Todos los derechos reservados
+        </small>
+    </footer>
+</div>
+
+@code {
+    [CascadingParameter] protected Task<AuthenticationState>? AuthState { get; set; }
+    
+    [Inject] private IAuthService AuthService { get; set; } = default!;
+    [Inject] private NavigationManager Navigation { get; set; } = default!;
+
+    private bool IsLoading { get; set; } = true;
+    private string _userRole = "Invited";
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+            if (!isAuthenticated)
+            {
+                Navigation.NavigateTo("/login");
+                return;
+            }
+
+            _userRole = await AuthService.GetUserRoleAsync();
+            IsLoading = false;
+        }
+        catch (Exception)
+        {
+            Navigation.NavigateTo("/login");
+        }
+        
+        await base.OnInitializedAsync();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            // Verificar autenticación en cada navegación
+            var isAuthenticated = await AuthService.IsAuthenticatedAsync();
+            if (!isAuthenticated && Navigation.Uri.Contains("/login") == false)
+            {
+                Navigation.NavigateTo("/login");
+            }
+        }
+    }
+}
